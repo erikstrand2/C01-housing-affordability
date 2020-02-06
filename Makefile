@@ -1,11 +1,11 @@
 # Search path
-VPATH =
+VPATH = data data-raw eda reports scripts
 
 # Processed data files
-DATA =
+DATA = ipums.rds hmda.rds boundaries.shp
 
 # EDA studies
-EDA =
+EDA = 
 
 # Reports
 REPORTS =
@@ -20,6 +20,8 @@ all : $(DATA) $(EDA) $(REPORTS)
 
 
 # Pattern rules
+%.shp : %.R
+	Rscript $<
 %.rds : %.R
 	Rscript $<
 %.md : %.Rmd
