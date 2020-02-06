@@ -24,5 +24,16 @@ hmda <- read_rds(file_hmda)
 ipums <- read_rds(file_ipums)
 boundaries <- st_read(file_msa_sf)
 
+# IN PROGRESS
+# hmda_ipums_boundaries <-
+#   hmda %>%
+#   left_join(
+#     ipums %>%
+#       left_join(boundaries, by = "msa_code"),
+#     by = "msa_code"
+#   )
 
-ipums_missing <- ipums %>% left_join(boundaries, by = "msa_code")
+
+
+
+

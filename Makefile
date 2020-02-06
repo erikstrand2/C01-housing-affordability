@@ -2,7 +2,7 @@
 VPATH = data data-raw eda reports scripts
 
 # Processed data files
-DATA = ipums.rds hmda.rds boundaries.shp
+DATA = ipums.rds hmda.rds boundaries.shp msa.rds hmda_ipums_boundaries.rds
 
 # EDA studies
 EDA = 
@@ -14,7 +14,8 @@ REPORTS =
 all : $(DATA) $(EDA) $(REPORTS)
 
 # Data dependencies
-
+hmda.rds : msa.rds
+hmda_ipums_boundaries.rds : ipums.rds hmda.rds boundaries.shp
 
 # EDA study and report dependencies
 

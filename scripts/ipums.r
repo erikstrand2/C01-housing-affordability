@@ -46,6 +46,9 @@ read_ipums_micro(
     survey %in% surveys,
     msa_code > 0
   ) %>%
+  mutate(
+    msa_code = as.integer(msa_code)
+  ) %>%
   write_csv(path = file_out_csv)
 
 read_csv(file_out_csv) %>%

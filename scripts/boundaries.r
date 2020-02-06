@@ -21,7 +21,7 @@ file_out <- here::here("/data/boundaries.shp")
 
 #===============================================================================
 
-temp <- st_read(sf_raw) %>%
+read_sf(sf_raw) %>%
   select(
     msa_code = CBSAFP,
     msa_name = NAME,
