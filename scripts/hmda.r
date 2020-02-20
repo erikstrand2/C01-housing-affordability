@@ -44,6 +44,7 @@ read_csv(file = file_raw, col_types = var_cols) %>%
   ) %>%
   drop_na(census_tract_number, applicant_income_000s) %>%
   mutate(
+    year = as_of_year,
     loan_amount = loan_amount_000s * 1000,
     census_tract_number = as.double(census_tract_number) * 100,
     applicant_income = applicant_income_000s * 1000,
@@ -52,6 +53,24 @@ read_csv(file = file_raw, col_types = var_cols) %>%
   left_join(read_rds(file_msa), by = c("msa_code" = "div_code")) %>%
   mutate(msa_code = if_else(is.na(msa_code.y), msa_code, msa_code.y)) %>%
   select(
-    -c(loan_purpose, loan_amount_000s, applicant_income_000s, msa_code.y)
+    -c(
+      loan_purpose,
+      loan_amount_000s,
+      applicant_income_000s,
+      msa_code.y,
+      msamd,
+      loan_amount
+    )
   ) %>%
+  group_by(
+    year,
+    msamd_name,
+    state_name,
+    state_code,
+    county_name,
+    county_code,
+    msa_code,
+    applicant_income
+  ) %>%
+  summarize(owners = n()) %>%
   write_rds(path = file_out, compress = "gz")

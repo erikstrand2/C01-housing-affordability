@@ -1,0 +1,49 @@
+---
+title: "Basic Map EDA"
+author: "Erik Strand"
+date: "`r Sys.Date()`"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r}
+library(tidyverse)
+library(sf)
+
+# Parameters
+
+  # File for HARI data
+file_hari <- here::here("/data/hari.shp")
+
+# ==============================================================================
+  # Read in data
+hari <- read_sf(file_hari)
+```
+
+```{r, out.width="100%"}
+states <- 
+  ussf::boundaries(geography = "state") %>% 
+  st_transform(crs = st_crs(hari))
+
+hari %>% 
+  ggplot(aes(fill = hari)) + 
+  geom_sf(
+    data = states, 
+    # aes(geometry = geometry), 
+    color = "white", 
+    size = 0.1, 
+    fill = "gray"
+  ) + 
+  geom_sf(
+    aes(geometry = geometry), 
+    color = "white", 
+    size = 0.1
+  ) + 
+  scale_fill_gradientn(
+    colors = RColorBrewer::brewer.pal(n = 9, name = "RdYlGn"), 
+    na.value = "gray"
+  ) + 
+  theme_void()
+```
+

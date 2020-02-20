@@ -49,6 +49,9 @@ read_ipums_micro(
   mutate(
     msa_code = as.integer(msa_code)
   ) %>%
+  group_by(year, msa_code, hh_income) %>%
+  summarize(renters = sum(hh_weight)) %>%
+  ungroup() %>%
   write_csv(path = file_out_csv)
 
 read_csv(file_out_csv) %>%
