@@ -24,17 +24,17 @@ hari <- read_sf(file_hari)
 ```{r, out.width="100%"}
 states <- 
   ussf::boundaries(geography = "state") %>% 
-  st_transform(crs = st_crs(hari))
+  filter(!(STUSPS %in% c("AK", "HI")))
 
 hari %>% 
   ggplot(aes(fill = hari)) + 
   geom_sf(
-    data = states, 
-    # aes(geometry = geometry), 
-    color = "white", 
-    size = 0.1, 
+    data = states,
+    # aes(geometry = geometry),
+    color = "white",
+    size = 0.1,
     fill = "gray"
-  ) + 
+  ) +
   geom_sf(
     aes(geometry = geometry), 
     color = "white", 

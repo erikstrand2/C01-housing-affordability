@@ -15,13 +15,17 @@ library(tidyverse)
   # Joined HMDA-IPUMS dataset file
 file_hmda_ipums <- here::here("/data/hmda_ipums.rds")
 
+  # File with national indexes
+file_national_index <- here::here("/data/national_index.rds")
+
   # Output file for long-form HARI data
 file_out_hari_long <- here::here("/data/hari_long.rds")
 
 #===============================================================================
 
-hari_long <-
-  read_rds(file_hmda_ipums) %>%
+national_index <- read_rds(file_national_index)
+
+temp <- read_rds(file_hmda_ipums) %>%
   group_by(year, msa_code) %>%
   mutate(
     owners_prop = owners / sum(owners),
@@ -30,5 +34,15 @@ hari_long <-
     rntr_afford = renters_prop * cum_prob,
     hari = cumsum(rntr_afford)
   ) %>%
+  left_join(
+    national_index %>% select(year, hh_inc_bracket, renters_prop),
+    by = c("year", "hh_inc_bracket"),
+    suffix = c("", "_ntl")
+  ) %>%
+  mutate(
+    rntr_afford_ntl = renters_prop_ntl * cum_prob,
+    hari_ntl = cumsum(rntr_afford_ntl)
+  ) %>%
+  ungroup() %>%
   write_rds(file_out_hari_long)
 

@@ -13,6 +13,9 @@ library(tidyverse)
   # HMDA data file location
 file_raw <- here::here("/data-raw/hmda.zip")
 
+  # HMDA URL file
+file_url <- "https://files.consumerfinance.gov/hmda-historic-loan-data/hmda_2017_nationwide_first-lien-owner-occupied-1-4-family-records_labels.zip"
+
   # MSA lookup table file location
 file_msa <- here::here("/data/msa.rds")
 
@@ -74,3 +77,6 @@ read_csv(file = file_raw, col_types = var_cols) %>%
   ) %>%
   summarize(owners = n()) %>%
   write_rds(path = file_out, compress = "gz")
+
+test <- read_csv(file_url)
+
