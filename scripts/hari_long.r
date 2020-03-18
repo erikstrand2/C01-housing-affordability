@@ -25,15 +25,15 @@ file_out_hari_long <- here::here("/data/hari_long.rds")
 
 national_index <- read_rds(file_national_index)
 
-temp <- read_rds(file_hmda_ipums) %>%
+view(read_rds(file_hmda_ipums) %>%
   group_by(year, msa_code) %>%
   mutate(
     owners_prop = owners / sum(owners),
     renters_prop = renters / sum(renters),
     cum_prob = cumsum(owners_prop),
     rntr_afford = renters_prop * cum_prob,
-    hari = cumsum(rntr_afford)
-  ) %>%
+    hari = if_else(renters == 0, NA_real_, cumsum(rntr_afford))
+  )) %>%
   left_join(
     national_index %>% select(year, hh_inc_bracket, renters_prop),
     by = c("year", "hh_inc_bracket"),

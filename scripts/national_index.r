@@ -18,7 +18,7 @@ file_out <- here::here("/data/national_index.rds")
 #===============================================================================
 
 read_rds(file_hmda_ipums) %>%
-  group_by(year, hh_income = hh_inc_bracket) %>%
+  group_by(year, hh_inc_bracket) %>%
   summarize(
     owners = sum(owners),
     renters = sum(renters)

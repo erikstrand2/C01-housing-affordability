@@ -22,11 +22,24 @@ file_out_csv <- here::here("/data/ipums.csv")
 file_out <- here::here("/data/ipums.rds")
 
   # Surveys to include
-surveys <- 201701
+surveys <-
+  c(
+    200701,
+    200801,
+    200901,
+    201001,
+    201101,
+    201201,
+    201301,
+    201401,
+    201501,
+    201601,
+    201701
+  )
 
 #===============================================================================
 
-read_ipums_micro(
+ipums <- read_ipums_micro(
   ddi = read_ipums_ddi(ddi_file = ddi_file),
   data_file = dat_file
 ) %>%
@@ -56,6 +69,3 @@ read_ipums_micro(
 
 read_csv(file_out_csv) %>%
   write_rds(file_out, compress = "gz")
-
-# Currently not working
-# if (exists(file_out_csv)) file.remove(file_out_csv)

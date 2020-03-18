@@ -22,11 +22,11 @@ file_out_hari <- here::here("/data/hari.shp")
 hari_albers <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
 #===============================================================================
 
-hari <-
-  read_rds(file_hari_long) %>%
+read_rds(file_hari_long) %>%
   select(year, msa_code, hari, hari_ntl) %>%
   group_by(year, msa_code) %>%
-  top_n(hari, n = 1) %>%
+  slice(n()) %>%
+  mutate_all(~ if_else(is.nan(.), NA_real_, .)) %>%
   left_join(read_sf(file_boundaries), by = "msa_code") %>%
   st_as_sf() %>%
   st_transform(st_crs(hari_albers)) %>%

@@ -1,0 +1,615 @@
+---
+title: "Final report"
+author: "Erik Strand"
+date: "`r Sys.Date()`"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r, include = FALSE}
+# Parameters
+library(tidyverse)
+library(sf)
+library(kableExtra)
+
+  # File for joined data
+file_joined <- here::here("/data/hmda_ipums.rds")
+
+  # File for long-form HARI
+file_hari_long <- here::here("/data/hari_long.rds")
+
+  # File for final HARI
+file_hari <- here::here("/data/hari.shp")
+
+  # File for MSA boundaries
+file_boundaries <- here::here("/data/boundaries.shp")
+
+# ==============================================================================
+
+# Read in files
+joined_acs_hmda <- read_rds(file_joined)
+hari_long <- read_rds(file_hari_long)
+hari <- read_sf(file_hari)
+boundaries <- read_sf(file_boundaries)
+
+states <- 
+  ussf::boundaries(geography = "state")
+
+labels <- function(x) {
+  case_when(
+    x <= 0.2 ~ "≤20%",
+    x < 0.45 ~ str_c(as.character(x * 100), "%"), 
+    TRUE ~ "≥45%"
+  )
+}
+
+cities_sample <- 
+  c(
+    31080, 
+    41740, 
+    35620, 
+    41860, 
+    16980, 
+    26420, 
+    14460, 
+    19100, 
+    33100, 
+    37980, 
+    19740, 
+    42660, 
+    19820, 
+    33460, 
+    41180, 
+    47900, 
+    12060, 
+    38060, 
+    45300
+  )
+
+cities_sample_small <- 
+  c(
+    35620, 
+    31080, 
+    16980, 
+    41860, 
+    47900, 
+    26420
+  )
+```
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction 
+
+Affordable housing is a significant challenge facing the United States today. Half of the nation's renters are rent burdened [^1]. Many renters are unable to afford to purchase a home. While homeownership in some contexts, particularly standalone single-family homes, can cause problems, owning property is also one of the most effective ways to build equity and wealth. Particulary for communities historically excluded from the homeownership market, buying a home is perhaps the best way to close the wealth gap with those who have owned for generations. 
+
+In this context, I have chosen to do my final project on the subject of homeownership affordability. In this project, I recreate findings from a [2018 report](https://www.urban.org/sites/default/files/publication/97496/housing_affordability_local_and_national_perspectives_1.pdf) by Laurie Goodman, Wei Li, and Jun Zhu and published by the Urban Institute. 
+
+This report influentially created a new metric for determining homeownership affordability in metropolitan areas. The authors propose a metric called the __Homeownership Affordability for Renters Index, or HARI__. The HARI metric is produced for each of 290 Metropolitan Statistical Areas (MSAs) in the U.S. The metric represents the probability that a renter can afford to purchase a home in a given MSA. One metric is calculated for renters living within that MSA, and a second is given for all renters in the nation. Through the HARI, we can see how affordable each city's homeownership stock is to its own renters as well as those nationwide. 
+
+The HARI has a few advantages over existing affordable housing/homeownership metrics: 
+
+1. The metric considers renters and owners at all income levels, whereas traditional metrics are based on the median incomes of renters and owners. This is highly advantageous because it more heavily considers people at the extremes of the income spectrum, particularly people with the lowest incomes who are most vulnerable in terms of housing. 
+2. Affordability is determined in relation to empirical data from each city. In other words, HARI in a given year and city is determined using homeownership rates of people in different income brackets. By contrast, existing metrics tend to define affordable housing as that which costs 30% or less of a household's income, as determined by the U.S. Department of Housing and Urban Development (HUD). HARI is advantageous to this method because income thresholds for homeownership may differ significantly from city to city. 
+
+
+## Data and Methods 
+
+The original report used a proprietary dataset compiled by the Urban Institute to calculate their findings. Unfortunately, this dataset wasn't made publicly available. For the purposes of this project, I recreated my best approximation of the original dataset used by the authors. Due to this, my findings differ somewhat from the original report. 
+
+### Data sources
+
+My dataset compiles two main datasets: 
+
+1. I use Housing Mortgage Disclosure Act (HMDA) data published annually by the [Consumer Finance Protection Bureau](https://www.consumerfinance.gov/data-research/hmda/historic-data/) for the years 2007-2017. This dataset provides information about originated mortages nationwide, which I use as a proxy for homeownership. 
+2. I combine HMDA data with American Community Survey (ACS) data published by IPUMS (Integrated Public Use Microdata Survey). ACS data contains information regarding renter populations and incomes. 
+
+I aggregated each of these datasets at the MSA level and joined the two by year, MSA and household income. In the process of doing so, I clumped household income for both renters and owners into brackets ranging from $0 to $250,000 in $10,000 increments (rounded down). This allowed me to normalize and compare the data in meaningful bins. A sample of the joined data appears as follows: 
+
+```{r}
+joined_acs_hmda %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+Each MSA has an entry for each income bracket listing the number of renters and homeowners in each year between 2007 and 2017. 
+
+Using this data, I calculated HARI for each MSA using the guidelines in the original report. Five new variables were created: 
+
+* `Proportion owners`: The number of owners by MSA in each income bracket as a percentage of the total number of owners in that MSA; 
+* `Proportion renters`: The same calculation, for renters; 
+* `Cumulative ownership probability`: A cumulative sum of `Proportion owners`. Represents the probability that a homeowner makes at or below each income bracket. 
+* `Renter affordability`: `Proportion renters` * `Cumulative ownership probability`. Represents the percentage of renters who can afford a home at or below each income bracket, based on the percentage of owners in the same bracket. 
+* `HARI`: The cumulative sum of `Renter affordability`. The HARI at the highest income bracket represents the total percentage of renters in each MSA that can afford to buy a home there. 
+
+Additionally, I repeated these calculations for national HARI estimates. I then joined the national and local calculations and added two new variables to represent national HARIs: 
+
+* `Renter afford national`: The national `Proportion renters` * the local `Renter affordability`. This represents the percentage of national renters who can afford to buy a home in each MSA at each income bracket. 
+* `HARI national`: The cumulative sum of `Renter afford national`. This is the HARI based on renters nationwide. 
+
+This long-form HARI shows all the intermediate steps used to calculate the final HARI for each MSA: 
+
+```{r}
+hari_long %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+Finally, I reduced this dataset to just show the final HARI and national HARI for each MSA. At this point, I also added geometries to each MSA using [US Census Bureau shapefiles](https://catalog.data.gov/dataset/tiger-line-shapefile-2017-nation-u-s-current-metropolitan-statistical-area-micropolitan-statist): 
+
+```{r}
+hari %>% 
+  st_drop_geometry() %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+NOTE: Some MSA/year pairs are missing HARI data. This is due to renter and/or owner data not being reported for that MSA in the year in question. This data was usually only reported for MSAs over a certain size, hence gaps in earlier years. 
+
+
+## Analysis & EDA
+
+### Maps
+
+```{r, cache = TRUE, warning = FALSE, out.width="100%"}
+hari %>% 
+  st_intersection(states) %>% 
+  mutate(hari = pmax(pmin(hari, 0.45), 0.2)) %>% 
+  ggplot(aes(fill = hari)) + 
+  geom_sf(
+    data = states,
+    color = "white",
+    size = 0.1,
+    fill = "gray"
+  ) +
+  geom_sf(
+    aes(geometry = geometry), 
+    color = "white", 
+    size = 0.1
+  ) + 
+  scale_fill_gradientn(
+    colors = RColorBrewer::brewer.pal(n = 9, name = "RdBu"), 
+    na.value = "gray", 
+    labels = labels
+  ) + 
+  guides(
+    fill = 
+      guide_colorbar(
+        barheight = 0.5,
+        barwidth = 15
+      )
+  ) + 
+  theme_void() + 
+  theme(
+    legend.direction = "horizontal",
+    legend.position = c(0.5, 0.95),
+    plot.title = element_text(hjust = 0.5, vjust = 1),
+    plot.subtitle = element_text(hjust = 0.5, vjust = 1)
+  ) +
+  labs(
+    title = 
+      "Homeownership Affordability for Renters Index in U.S. Metropolitan Areas (2017)",
+    subtitle = "% of local renters who can afford to buy a home",
+    fill = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+This first map shows the local HARI distribution of all MSAs in 2017. 
+
+* In general, most MSAs had homes affordable to fewer than 30% of their renters. 
+* A few cities were exceptions, with homeownership affordability at or above 40% of the local rental population: 
+
+```{r}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(year == 2017) %>% 
+  arrange(desc(hari)) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+* Similarly, the following MSAs had the worst local HARIs in 2017: 
+
+```{r}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(year == 2017) %>% 
+  arrange(hari) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+
+```{r, cache = TRUE, warning = FALSE, out.width="100%"}
+hari %>%
+  st_intersection(states) %>% 
+  mutate(hari_ntl = pmax(pmin(hari_ntl, 0.45), 0.2)) %>% 
+  filter(year == 2017) %>% 
+  ggplot(aes(fill = hari_ntl)) + 
+  geom_sf(
+    data = states,
+    color = "white",
+    size = 0.1,
+    fill = "gray"
+  ) +
+  geom_sf(
+    aes(geometry = geometry), 
+    color = "white", 
+    size = 0.1
+  ) +
+  scale_fill_gradientn(
+    colors = RColorBrewer::brewer.pal(n = 9, name = "RdBu"),
+    na.value = "gray",
+    labels = labels
+  ) +
+  guides(
+    fill =
+      guide_colorbar(
+        barheight = 0.5,
+        barwidth = 15
+      )
+  ) +
+  theme_void() +
+  theme(
+    legend.direction = "horizontal",
+    legend.position = c(0.5, 0.95),
+    plot.title = element_text(hjust = 0.5, vjust = 1),
+    plot.subtitle = element_text(hjust = 0.5, vjust = 1)
+  ) +
+  labs(
+    title =
+      "Homeownership Affordability for Renters Index in U.S. Metropolitan Areas (2017)",
+    subtitle = "% of national renters who can afford to buy a home",
+    fill = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+Next, I looked at the distribution of national HARIs in 2017. This time, the distribution is more mixed. More cities have national HARIs above 35% than below it, although a few select cities are _far_ below this mark. 
+
+* The cities most affordable to renters nationwide are: 
+
+```{r}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(year == 2017) %>% 
+  arrange(desc(hari_ntl)) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+* And the least affordable MSAs are: 
+
+```{r}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(year == 2017) %>% 
+  arrange(hari_ntl) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+* Perhaps unsurprisingly, the 5 least affordable cities to nationwide renters are all in California. 
+
+```{r, cache = TRUE, warning = FALSE, out.width="100%"}
+hari %>% 
+  st_intersection(states) %>% 
+  mutate(net = hari_ntl - hari, net = pmax(pmin(net, 0.1), -0.1)) %>% 
+  ggplot(aes(fill = net)) + 
+  geom_sf(
+    data = states,
+    color = "white",
+    size = 0.1,
+    fill = "gray"
+  ) +
+  geom_sf(
+    aes(geometry = geometry), 
+    color = "white", 
+    size = 0.1
+  ) + 
+  scale_fill_gradientn(
+    colors = RColorBrewer::brewer.pal(n = 9, name = "RdBu"), 
+    na.value = "gray",
+    labels = scales::label_percent(accuracy = 1)
+  ) + 
+  guides(
+    fill = 
+      guide_colorbar(
+        barheight = 0.5,
+        barwidth = 15
+      )
+  ) + 
+  theme_void() + 
+  theme(
+    legend.direction = "horizontal",
+    legend.position = c(0.5, 0.95),
+    plot.title = element_text(hjust = 0.5, vjust = 1), 
+    plot.subtitle = element_text(hjust = 0.5, vjust = 1)
+  ) +
+  labs(
+    title = 
+      "Homeownership Affordability for Renters Index in U.S. Metropolitan Areas (2017)",
+    subtitle = "Difference between national and local affordability",
+    fill = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+This next map shows the difference between the national and local HARIs for all MSAs in 2017 (national - local). 
+
+* Interestingly, the majority of MSAs had a positive difference here, indicating that they're more affordable to renters who _don't_ live in the city than those who do. 
+* The fact that most cities are more affordable to outsiders than inside renters suggests that a few cities must be far more affordable to current renters than renters from other cities. Sure enough, a few cities jump out: 
+
+```{r}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(year == 2017) %>% 
+  mutate(net = hari_ntl - hari) %>% 
+  arrange(net) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+
+```{r, cache = TRUE, warning = FALSE, out.width="100%"}
+hari_wide <- 
+  hari %>% 
+  st_drop_geometry() %>% 
+  pivot_wider(
+    -hari_ntl,
+    names_from = year, 
+    values_from = hari
+  ) %>% 
+  mutate(y10_diff = `2017` - `2007`) %>% 
+  left_join(boundaries %>% select(msa_code, geometry), by = "msa_code") %>% 
+  st_as_sf() %>% 
+  st_transform(crs = st_crs(states))
+
+hari_wide %>% 
+  st_intersection(states) %>% 
+  mutate(y10_diff = pmax(pmin(y10_diff, 0.1), -0.1)) %>% 
+  ggplot(aes(fill = y10_diff)) + 
+  geom_sf(
+    data = states,
+    color = "white",
+    size = 0.1,
+    fill = "gray"
+  ) +
+  geom_sf(
+    aes(geometry = geometry), 
+    color = "white", 
+    size = 0.1
+  ) + 
+  scale_fill_gradientn(
+    colors = RColorBrewer::brewer.pal(n = 9, name = "RdBu"), 
+    na.value = "gray",
+    labels = scales::label_percent(accuracy = 1)
+  ) + 
+  guides(
+    fill = 
+      guide_colorbar(
+        barheight = 0.5,
+        barwidth = 15
+      )
+  ) + 
+  theme_void() + 
+  theme(
+    legend.direction = "horizontal",
+    legend.position = c(0.5, 0.95),
+    plot.title = element_text(hjust = 0.5, vjust = 1), 
+    plot.subtitle = element_text(hjust = 0.5, vjust = 1)
+  ) +
+  labs(
+    title = 
+      "Homeownership Affordability for Renters Index in U.S. Metropolitan Areas",
+    subtitle = "Change in affordability between 2007 & 2017",
+    fill = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+Finally, I looked at the change in local HARI betwen 2007 and 2017 for all MSAs. A number of cities are missing 2007 data, so the map is not as comprehensive as the previous ones. 
+
+* Of the cities with data from both years, the majority got more affordable between 2007 and 2017. This may or may not be a good sign: while it may represent increased opportunities for affordable homeownership, it could also be a byproduct of gentrification and the displacement of lower-income renters. 
+* The following cities increased in local affordability the _most_ over this period: 
+
+```{r}
+hari_wide %>% 
+  st_drop_geometry() %>% 
+  select(msa_code, msa_name, `2007`, `2017`, y10_diff) %>% 
+  arrange(desc(y10_diff)) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+* And the following cities saw the greatest decrease in HARI from 2007 to 2017: 
+
+```{r}
+hari_wide %>% 
+  st_drop_geometry() %>% 
+  select(msa_code, msa_name, `2007`, `2017`, y10_diff) %>% 
+  arrange(y10_diff) %>% 
+  head(n = 10L) %>% 
+  kable()
+```
+
+### EDA 
+
+```{r, out.width = "100%"}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(msa_code %in% cities_sample, year == 2017) %>% 
+  pivot_longer(
+    c(hari, hari_ntl), 
+    names_to = "metric", 
+    values_to = "value"
+  ) %>% 
+  mutate(metric = if_else(metric == "hari", "Local", "National")) %>% 
+  ggplot(
+    aes(
+      x = fct_reorder2(msa_name, metric, value, .desc = FALSE), 
+      y = value,
+      fill = metric
+    )
+  ) + 
+  geom_col(position = "dodge") + 
+  scale_fill_manual(values = c("darkblue", "gold")) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  coord_flip() + 
+  labs(
+    title = "HARIs for selected cities (2017)",
+    x = NULL, 
+    y = NULL, 
+    fill = "HARI",
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+This graph examines 19 selected cities for their 2017 statistics. These are among the largest and most prominent cities in the U.S., so they warrant some focused study. 
+
+* About 1/3 of these cities are more affordable to outsiders than inside renters. This is somewhat in contradiction to the map from earlier, which concluded that most cities are more affordable to outsiders than insiders. Given this data, it seems that the biggest cities are less likely to be affordable to renters from other cities, whereas smaller cities are more likely to be affordable to renters from both other small cities and larger cities. 
+* With the exception of San Diego and Los Angeles, local HARI was more or less consistent among these cities, regardless of drastic differences in national HARI. This suggests that housing markets in cities tend to be fairly self-contained entities that more or less meet the needs of their populations at about the same rate, at least when it comes to affordable homeownership. It's only when a national perspective is introduced that the drastic differences in affordability are revealed. 
+
+```{r, warning = FALSE, cache = TRUE, out.width = "100%"}
+hari %>% 
+  ggplot(aes(hari, hari_ntl)) + 
+  geom_point(shape = 21, alpha = 0.5) + 
+  geom_smooth(method = "loess") + 
+  scale_x_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  labs(
+    title = "Local and national HARIs for all MSAs, 2007-2017",
+    x = "Local HARI", 
+    y = "National HARI", 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+In this chart, I examine the relationship between each MSAs local and national HARIs. Each point represents one MSA in one year (2007-2017). 
+
+* Across all years, there was a nearly linear correlation between the local and national HARI: the more affordable a city is to its own renters, the more affordable it is to renters from other cities as well. 
+* On average, most cities appear to be slightly more affordable to outside renters than insiders. For example, the average city with 20% local affordability is affordable to around 25% of national renters. 
+* At around 50% local affordability, this relationships becomes inverted: the few cities with homes affordable to more than half of their renters tend to be slightly less affordable to outside renters. However, few such observations exist, as most cities have lower affordability. 
+
+```{r, fig.height = 8, fig.width = 10}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(msa_code %in% cities_sample_small) %>% 
+  ggplot(aes(year, hari)) + 
+  geom_line(aes(color = msa_name), size = 1) + 
+  geom_line(
+    data = . %>% group_by(year) %>% summarize(hari = mean(hari)), 
+    aes(color = "National average"), 
+    size = 1
+  ) + 
+  scale_x_continuous(breaks = scales::breaks_width(1)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_color_manual(
+    values = 
+      c("gold", "darkblue", "darkred", "black", "pink", "gray", "darkgreen"), 
+    guide = guide_legend(ncol = 2)
+  ) +
+  theme(legend.position = "bottom") + 
+  labs(
+    title = "HARI in selected cities, 2007-2017", 
+    subtitle = "All cities have gotten more affordable in the past 10 years", 
+    x = NULL, 
+    y = "Local HARI",
+    color = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+This chart examines an even smaller subset of cities over time to analyze affordability trends, in this case at a local HARI level. The six cities chosen were selected based on a combination of population size and housing market attention. 
+
+* All six cities got at least marginally more affordable between 2007 and 2017, as did the national average. However, the results were surprisingly non-linear. Numerous cities experienced large peaks in random years, followed by a return to previous levels thereafter. Washington, D.C. and San Francisco were particularly curious in this way. 
+* Although the overall trends are encouraging, only two cities - New York and Chicago - saw their highest affordability in 2017. All other cities, including the national average, peaked somewhere between 2007 and 2017. This suggests that affordable homeownership gains are not consistent, and tend to follow an ebb-and-flow pattern. 
+
+```{r, fig.height = 8, fig.width = 10}
+hari %>% 
+  st_drop_geometry() %>% 
+  filter(msa_code %in% cities_sample_small) %>% 
+  ggplot(aes(year, hari_ntl)) + 
+  geom_line(aes(color = msa_name), size = 1) + 
+  geom_line(
+    data = . %>% group_by(year) %>% summarize(hari_ntl = mean(hari_ntl)), 
+    aes(color = "National average"), 
+    size = 1
+  ) + 
+  scale_x_continuous(breaks = scales::breaks_width(1)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_color_manual(
+    values = 
+      c("gold", "darkblue", "darkred", "black", "pink", "gray", "darkgreen"), 
+    guide = guide_legend(ncol = 2)
+  ) +
+  theme(legend.position = "bottom") + 
+  labs(
+    title = "National HARI in selected cities, 2007-2017", 
+    subtitle = "Most cities have gotten more affordable in the past 10 years", 
+    x = NULL, 
+    y = "National HARI",
+    color = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+This next graph is the same as the previous, only with the national HARI represented instead of local. 
+
+* Once again, all cities technically improved their affordability from 2007 to 2017. However, these gains were often slight and very erratic. 
+* There was a general peak around 2011-2012 for many cities. Since then, most cities have actually gradually declined in affordability. 
+* As with local affordability, there are massive spikes in some years for certain cities. San Francisco, Washington, D.C., and Houston all saw affordability spikes of 15% or more in at least one year, followed by a return to previous rates afterward. This is a strange pattern, as it's highly unlikely that cities actually drastically increased their affordable housing stock one year, only to have it reduced again the following. I posit a few explanations for why this might take place: 
+  + Spike years may be indicative of a large wave of gentrification. For example, San Francisco's spike of more than 15% affordability in 2011 coincides with the start of the tech boom. It's plausible that what appears to be a rise in affordability is actually just an immense rise in the income of the city's renters who worked in the tech industry. The following year, in 2012, homeownership prices would have adjusted to increased local income, therefore reducing the affordability again. 
+  + Alternatively, these spikes may also be a result of one-time, limited-stock affordable homeownership initiatives. This same spike in 2011 could plausibly be a result of a new affordable homeownership development or initiative that allowed lower-income renters to afford homes. However, given the context of SF in 2011 and other cities in their spike years, it seems unlikely that this is the broad explanation. 
+  + Finally, this could just be faulty data!
+
+```{r, out.width="100%", warning = FALSE}
+hari %>% 
+  st_drop_geometry() %>% 
+  ggplot(aes(x = year)) + 
+  geom_smooth(aes(y = hari, color = "Local"), method = "loess") + 
+  geom_smooth(aes(y = hari_ntl, color = "National"), method = "loess") + 
+  scale_x_continuous(breaks = scales::breaks_width(1)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_color_manual(values = c("darkblue", "gold")) + 
+  theme(legend.position = "bottom") + 
+  labs(
+    title = "HARI trends, 2007-2017", 
+    subtitle = 
+      "Cities became increasingly affordable through 2011, then decreased", 
+    x = NULL, 
+    y = "HARI",
+    color = NULL, 
+    caption = 
+      "Source: Home Mortgage Disclosure Act\nand American Community Survey"
+  )
+```
+
+Lastly, I looked at the overall HARI trends for all MSAs over time. 
+
+* As we saw in previous graphs, cities were generally more affordable overall in 2017 than they were in 2007. This is, theoretically, a good sign. 
+* Once again, affordability rises sharply for a few years, peaks in 2011 for all cities, and then begins a more gradual decline afterward. I don't have a good explanation for this trend as of yet. 
+* Interestingly, in this post-2011 affordability decline, local affordability decreases slightly faster than national.
+
+
+## Conclusions
+
+Overall, I draw the following conclusions based on this project. 
+
+1. Homeownership affordability has generally increased over the last 10-15 years in American cities. We can view this generally as a positive. 
+2. Despite these general gains, progress has been slow and erratic in many cities and overall. Additionally, we have actually seen a decline in affordability since 2011 that could eventually put us at or below 2007 levels. Therefore, this report is also somewhat of a warning sign that a lot of work remains to be done in terms of creating affordable housing for renters. 
+3. What appears as increased or decreased affordability by these numbers may not be exactly what it seems. It's plausible that changes in affordability are truly reflective of cities' commitments (or lack thereof) to make homeownership affordable, but it could also be reflective of a number of other factors. Chiefly, gentrification and displacement of low-income renters, in the HARI formula, would counterintuitively appear as increased homeownership affordability. Improvements to this metric should be verified to ensure they're reflective of meaningful, positive change. 
+
+[^1]: ApartmentList, 2019 Cost Burden Report: <https://www.apartmentlist.com/rentonomics/cost-burden-2019/>
